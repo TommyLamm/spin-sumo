@@ -77,16 +77,18 @@ export class UIOverlay {
       ctx.stroke();
 
       // Text
+      ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 20px system-ui';
+      ctx.font = 'bold 20px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       if (btn.subtext) {
-        ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2 - 9);
-        ctx.font = '12px system-ui';
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2 - 10);
+        ctx.font = '13px system-ui, -apple-system, sans-serif';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         ctx.fillText(btn.subtext, btn.x + btn.w / 2, btn.y + btn.h / 2 + 13);
       } else {
         ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2);
