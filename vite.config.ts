@@ -27,6 +27,14 @@ export default defineConfig({
         if (fs.existsSync(coverPngSrc)) {
           fs.copyFileSync(coverPngSrc, path.join(dist, 'cover.png'));
         }
+        const sdkJsSrc = path.resolve(__dirname, 'playroom-sdk.js');
+        const sdkDtsSrc = path.resolve(__dirname, 'playroom-sdk.d.ts');
+        if (fs.existsSync(sdkJsSrc)) {
+          fs.copyFileSync(sdkJsSrc, path.join(dist, 'playroom-sdk.js'));
+        }
+        if (fs.existsSync(sdkDtsSrc)) {
+          fs.copyFileSync(sdkDtsSrc, path.join(dist, 'playroom-sdk.d.ts'));
+        }
       },
     },
   ],

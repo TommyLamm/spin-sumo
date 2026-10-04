@@ -9,6 +9,7 @@ import { SumoAI } from '../ai/SumoAI';
 import { UIOverlay } from '../ui/UIOverlay';
 import { SoundEffects } from '../audio/SoundEffects';
 import { StorageManager } from '../storage/Storage';
+import { Playroom } from '../playroom-sdk';
 
 export class Game {
   private canvas: HTMLCanvasElement;
@@ -38,6 +39,10 @@ export class Game {
   private countdownTimer: number = 3.2; // 3, 2, 1, GO
   private roundOverTimer: number = 0;
   private roundWinner: 1 | 2 = 1;
+ 
+  // Playroom Leaderboard run state
+  private currentRunId: string | null = null;
+  private currentRunPromise: Promise<{ runId: string } | null> | null = null;
 
   // Title demo AI
   private titleAiP1: SumoAI;
@@ -208,6 +213,28 @@ export class Game {
     this.p2Score = 0;
     this.currentRound = 1;
     this.ui.clearButtons();
+
+    // Reset and initiate Playroom run session for 1P vs AI
+    this.currentRunId = null;
+    this.currentRunPromise = null;
+    if (mode === '1P_AI') {
+      try {
+        this.currentRunPromise = Playroom.startRun()
+          .then((res) => {
+            if (res && res.runId) {
+              this.currentRunId = res.runId;
+            }
+            return res;
+          })
+          .catch((err) => {
+            console.warn('Playroom startRun failed:', err);
+            return null;
+          });
+      } catch (err) {
+        console.warn('Playroom startRun sync exception:', err);
+      }
+    }
+
     this.startRound();
   }
 
@@ -443,6 +470,28 @@ export class Game {
     const winner = this.p1Score >= this.targetScore ? 'p1' : (this.gameMode === '1P_AI' ? 'ai' : 'p2');
     this.saveData = StorageManager.recordMatch(winner, this.gameMode === '1P_AI');
 
+    // Report streak to Playroom leaderboard on 1P vs AI victory
+    if (this.gameMode === '1P_AI' && winner === 'p1') {
+      const currentStreak = Math.max(0, Math.floor(this.saveData.stats.currentStreak));
+      const runPromise = this.currentRunPromise;
+      const initialRunId = this.currentRunId;
+
+      (async () => {
+        try {
+          let runId = initialRunId;
+          if (!runId && runPromise) {
+            const res = await runPromise;
+            runId = res?.runId ?? null;
+          }
+          if (runId) {
+            await Playroom.finishRun({ runId, score: currentStreak });
+          }
+        } catch (e) {
+          console.warn('Playroom finishRun failed:', e);
+        }
+      })();
+    }
+
     this.ui.clearButtons();
     this.ui.addButton({
       id: 'btn_rematch',
@@ -468,6 +517,8 @@ export class Game {
       color: '#334155',
       hoverColor: '#475569',
       onClick: () => {
+        this.currentRunId = null;
+        this.currentRunPromise = null;
         this.state = 'TITLE';
         this.setupTitleUI();
         this.initTitleDemo();
@@ -582,7 +633,8 @@ export class Game {
         winner,
         this.gameMode === '1P_AI',
         this.p1Score,
-        this.p2Score
+        this.p2Score,
+        this.gameMode === '1P_AI' && winner === 1 ? this.saveData.stats.currentStreak : undefined
       );
       this.ui.drawButtons(this.ctx);
     }

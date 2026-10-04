@@ -338,7 +338,8 @@ export class UIOverlay {
     winnerId: 1 | 2,
     isAiMode: boolean,
     p1Score: number,
-    p2Score: number
+    p2Score: number,
+    streak?: number
   ) {
     ctx.save();
     ctx.textAlign = 'center';
@@ -360,7 +361,13 @@ export class UIOverlay {
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 26px monospace';
-    ctx.fillText(`最終比分  ${p1Score} : ${p2Score}`, 360, 295);
+    ctx.fillText(`最終比分  ${p1Score} : ${p2Score}`, 360, 290);
+
+    if (streak !== undefined && streak > 0) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 18px system-ui';
+      ctx.fillText(`🔥 當前連勝: ${streak} 連勝`, 360, 325);
+    }
 
     ctx.restore();
   }
