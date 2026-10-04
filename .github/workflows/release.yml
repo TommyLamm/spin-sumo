@@ -1,3 +1,5 @@
+# Copy into your game's .github/workflows/release.yml.
+# Set GAME_DIR once below to the deployable directory containing game.json.
 name: Release game
 on:
   push:
@@ -11,8 +13,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     env:
-      PLATFORM_DIR: ${{ runner.temp }}/playroom-platform-tools
-      GAME_ZIP: ${{ runner.temp }}/playroom-release/game.zip
+      PLATFORM_DIR: /tmp/playroom-platform-tools
+      GAME_ZIP: /tmp/playroom-release/game.zip
     defaults:
       run:
         shell: bash
@@ -23,6 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      # Add npm ci and npm run build here if compilation is needed.
+      # Change GAME_DIR above to the build output directory in that case.
       - name: Install dependencies and build
         run: |
           npm ci
