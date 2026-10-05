@@ -1,4 +1,6 @@
-import { GameMode, SumoSaveData } from '../types';
+import { GameMode, SumoSaveData, AIDifficulty, ArenaTheme } from '../types';
+import { ARENA_THEMES } from '../entities/Arena';
+import { TouchPoint } from '../core/Input';
 
 export interface UIButton {
   id: string;
@@ -61,7 +63,7 @@ export class UIOverlay {
       ctx.save();
 
       // Shadow
-      ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
       ctx.shadowBlur = 10;
       ctx.shadowOffsetY = 4;
 
@@ -73,7 +75,7 @@ export class UIOverlay {
 
       // Border highlight
       ctx.lineWidth = 2;
-      ctx.strokeStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.3)';
+      ctx.strokeStyle = isHovered ? '#ffffff' : 'rgba(255, 255, 255, 0.35)';
       ctx.stroke();
 
       // Text
@@ -81,15 +83,15 @@ export class UIOverlay {
       ctx.shadowBlur = 0;
       ctx.shadowOffsetY = 0;
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 20px system-ui, -apple-system, sans-serif';
+      ctx.font = 'bold 18px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
 
       if (btn.subtext) {
-        ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2 - 10);
-        ctx.font = '13px system-ui, -apple-system, sans-serif';
+        ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2 - 9);
+        ctx.font = '12px system-ui, -apple-system, sans-serif';
         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-        ctx.fillText(btn.subtext, btn.x + btn.w / 2, btn.y + btn.h / 2 + 13);
+        ctx.fillText(btn.subtext, btn.x + btn.w / 2, btn.y + btn.h / 2 + 12);
       } else {
         ctx.fillText(btn.text, btn.x + btn.w / 2, btn.y + btn.h / 2);
       }
@@ -106,16 +108,20 @@ export class UIOverlay {
     roundElapsed: number,
     isSuddenDeath: boolean,
     gameMode: GameMode,
-    isMuted: boolean
+    isMuted: boolean,
+    arenaTheme: ArenaTheme,
+    aiDifficulty: AIDifficulty
   ) {
     ctx.save();
 
+    const themeConfig = ARENA_THEMES[arenaTheme];
+
     // 1. Top scoreboard bar
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
     ctx.beginPath();
-    ctx.roundRect(160, 16, 400, 56, 16);
+    ctx.roundRect(150, 14, 420, 58, 16);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
     ctx.lineWidth = 1.5;
     ctx.stroke();
 
@@ -123,11 +129,11 @@ export class UIOverlay {
     ctx.fillStyle = '#38bdf8';
     ctx.font = 'bold 18px system-ui';
     ctx.textAlign = 'left';
-    ctx.fillText('P1', 185, 48);
+    ctx.fillText('P1', 170, 48);
 
     for (let i = 0; i < targetScore; i++) {
       ctx.beginPath();
-      ctx.arc(225 + i * 22, 45, 7, 0, Math.PI * 2);
+      ctx.arc(210 + i * 22, 45, 7, 0, Math.PI * 2);
       ctx.fillStyle = i < p1Score ? '#38bdf8' : 'rgba(56, 189, 248, 0.2)';
       ctx.fill();
       ctx.strokeStyle = '#38bdf8';
@@ -144,7 +150,7 @@ export class UIOverlay {
     // P2 side (Red / AI)
     for (let i = 0; i < targetScore; i++) {
       ctx.beginPath();
-      ctx.arc(430 + i * 22, 45, 7, 0, Math.PI * 2);
+      ctx.arc(445 + i * 22, 45, 7, 0, Math.PI * 2);
       ctx.fillStyle = i < p2Score ? '#fb7185' : 'rgba(251, 113, 133, 0.2)';
       ctx.fill();
       ctx.strokeStyle = '#fb7185';
@@ -155,24 +161,30 @@ export class UIOverlay {
     ctx.fillStyle = '#fb7185';
     ctx.font = 'bold 18px system-ui';
     ctx.textAlign = 'right';
-    ctx.fillText(gameMode === '1P_AI' ? 'AI' : 'P2', 535, 48);
+    let p2Label = 'P2';
+    if (gameMode === '1P_AI') {
+      const diffName = aiDifficulty === 'easy' ? '輕鬆' : (aiDifficulty === 'normal' ? '老手' : '宗師');
+      p2Label = `AI (${diffName})`;
+    }
+    ctx.fillText(p2Label, 550, 48);
 
-    // Sudden death banner if active
+    // 2. Arena Theme Badge & Sudden Death Banner below Scoreboard
+    ctx.textAlign = 'center';
     if (isSuddenDeath) {
       ctx.fillStyle = '#ef4444';
       ctx.font = 'bold 14px system-ui';
-      ctx.textAlign = 'center';
-      ctx.fillText('⚠ 驟死崩塌中 ⚠', 360, 92);
+      ctx.shadowColor = '#ef4444';
+      ctx.shadowBlur = 10;
+      ctx.fillText('⚠ 擂台驟死崩塌中 ⚠', 360, 94);
     } else {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.font = '12px monospace';
-      ctx.textAlign = 'center';
-      const sec = Math.floor(roundElapsed);
-      ctx.fillText(`00:${sec < 10 ? '0' : ''}${sec}`, 360, 90);
+      const secRemaining = Math.max(0, Math.ceil(themeConfig.suddenDeathTime - roundElapsed));
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.font = '12px system-ui';
+      ctx.fillText(`【${themeConfig.name}】 崩塌倒數: ${secRemaining}s`, 360, 93);
     }
 
-    // Sound mute indicator in top right
-    ctx.fillStyle = isMuted ? '#ef4444' : 'rgba(255, 255, 255, 0.6)';
+    // 3. Sound mute indicator in top right
+    ctx.fillStyle = isMuted ? '#ef4444' : 'rgba(255, 255, 255, 0.7)';
     ctx.font = '14px system-ui';
     ctx.textAlign = 'right';
     ctx.fillText(isMuted ? '🔇 靜音' : '🔊 音效', 700, 36);
@@ -184,76 +196,110 @@ export class UIOverlay {
     ctx: CanvasRenderingContext2D,
     p1Holding: boolean,
     p2Holding: boolean,
-    gameMode: GameMode
+    gameMode: GameMode,
+    touchPoints: TouchPoint[] = []
   ) {
     ctx.save();
 
     // Left Zone (P1)
-    const p1Alpha = p1Holding ? 0.3 : 0.08;
+    const p1Alpha = p1Holding ? 0.32 : 0.08;
     ctx.fillStyle = `rgba(56, 189, 248, ${p1Alpha})`;
-    ctx.fillRect(0, 0, 100, 720);
+    ctx.fillRect(0, 0, 110, 720);
     ctx.fillStyle = '#38bdf8';
     ctx.font = 'bold 14px system-ui';
     ctx.textAlign = 'center';
     ctx.save();
-    ctx.translate(40, 360);
+    ctx.translate(45, 360);
     ctx.rotate(-Math.PI / 2);
-    ctx.fillText(p1Holding ? '衝刺中！' : 'P1 按住衝刺 [A]', 0, 0);
+    ctx.fillText(p1Holding ? '🚀 P1 衝刺中！' : 'P1 按住衝刺 [A]', 0, 0);
     ctx.restore();
 
     // Right Zone (P2)
-    const p2Alpha = p2Holding ? 0.3 : 0.08;
+    const p2Alpha = p2Holding ? 0.32 : 0.08;
     ctx.fillStyle = `rgba(251, 113, 133, ${p2Alpha})`;
-    ctx.fillRect(620, 0, 100, 720);
+    ctx.fillRect(610, 0, 110, 720);
     ctx.fillStyle = '#fb7185';
     ctx.font = 'bold 14px system-ui';
     ctx.textAlign = 'center';
     ctx.save();
-    ctx.translate(680, 360);
+    ctx.translate(675, 360);
     ctx.rotate(Math.PI / 2);
     ctx.fillText(
-      gameMode === '1P_AI' ? 'AI 對戰' : (p2Holding ? '衝刺中！' : 'P2 按住衝刺 [L]'),
+      gameMode === '1P_AI' ? '🤖 AI 對戰' : (p2Holding ? '🚀 P2 衝刺中！' : 'P2 按住衝刺 [L]'),
       0,
       0
     );
     ctx.restore();
 
+    // Dynamic Touch Halos at finger positions
+    for (const pt of touchPoints) {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 40, 0, Math.PI * 2);
+      ctx.fillStyle = pt.player === 1 ? 'rgba(56, 189, 248, 0.4)' : 'rgba(251, 113, 133, 0.4)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 22, 0, Math.PI * 2);
+      ctx.strokeStyle = pt.player === 1 ? '#38bdf8' : '#fb7185';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
-  public drawTitleScreen(ctx: CanvasRenderingContext2D, stats: SumoSaveData['stats']) {
+  public drawTitleScreen(
+    ctx: CanvasRenderingContext2D,
+    stats: SumoSaveData['stats'],
+    currentTheme: ArenaTheme
+  ) {
     ctx.save();
+
+    const themeConfig = ARENA_THEMES[currentTheme];
 
     // Title logo
     ctx.textAlign = 'center';
     ctx.fillStyle = '#ffffff';
-    ctx.font = '900 48px system-ui';
-    ctx.shadowColor = 'rgba(56, 189, 248, 0.6)';
+    ctx.font = '900 46px system-ui';
+    ctx.shadowColor = 'rgba(56, 189, 248, 0.7)';
     ctx.shadowBlur = 24;
-    ctx.fillText('雙人旋轉碰碰車', 360, 130);
+    ctx.fillText('雙人旋轉碰碰車', 360, 115);
 
     ctx.shadowBlur = 0;
-    ctx.font = 'bold 22px system-ui';
+    ctx.font = 'bold 20px system-ui';
     ctx.fillStyle = '#38bdf8';
-    ctx.fillText('SPIN SUMO', 360, 170);
+    ctx.fillText('SPIN SUMO  v1.2.0', 360, 150);
 
-    ctx.font = '15px system-ui';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.fillText('一鍵旋轉瞄準 · 按住全力衝刺 · 擂台相撲大亂鬥', 360, 205);
+    ctx.font = '14px system-ui';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+    ctx.fillText('旋轉瞄準 · 全力衝刺 · 電磁脈衝 & 巨獸千斤頂 · 擂台崩塌相撲大戰', 360, 180);
 
-    // Stats box
+    // Theme description pill
     ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
     ctx.beginPath();
-    ctx.roundRect(140, 480, 440, 120, 16);
+    ctx.roundRect(140, 195, 440, 32, 10);
+    ctx.fill();
+    ctx.strokeStyle = themeConfig.rimColor;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = themeConfig.rimColor;
+    ctx.font = 'bold 13px system-ui';
+    ctx.fillText(`★ 當前擂台：${themeConfig.name} - ${themeConfig.description}`, 360, 215);
+
+    // Stats box
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.8)';
+    ctx.beginPath();
+    ctx.roundRect(140, 520, 440, 105, 16);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.stroke();
 
-    ctx.font = 'bold 15px system-ui';
+    ctx.font = 'bold 14px system-ui';
     ctx.fillStyle = '#94a3b8';
-    ctx.fillText('對戰紀錄統計', 360, 510);
+    ctx.fillText('對戰紀錄統計', 360, 545);
 
-    ctx.font = '14px system-ui';
+    ctx.font = '13px system-ui';
     ctx.fillStyle = '#ffffff';
     ctx.fillText(
       `總場次: ${stats.matchesPlayed}   |   P1 勝率: ${
@@ -262,20 +308,20 @@ export class UIOverlay {
           : 0
       }%`,
       360,
-      540
+      572
     );
 
     ctx.fillStyle = '#fbbf24';
     ctx.fillText(
       `最高連勝: ${stats.highestStreak}   |   當前連勝: ${stats.currentStreak}`,
       360,
-      572
+      600
     );
 
-    // Bottom copyright / instructions
+    // Bottom instructions
     ctx.font = '12px system-ui';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.fillText('電腦操作：P1 [A] 鍵，P2 [L] 鍵 | 行動裝置：點擊螢幕兩端', 360, 680);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.fillText('電腦操作：P1 [A] 鍵，P2 [L] 鍵 | 行動裝置：觸控左右分區衝刺', 360, 680);
 
     ctx.restore();
   }
@@ -285,24 +331,22 @@ export class UIOverlay {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Round number title
     ctx.fillStyle = '#94a3b8';
     ctx.font = 'bold 24px system-ui';
-    ctx.fillText(`ROUND ${roundNumber}`, 360, 300);
+    ctx.fillText(`ROUND ${roundNumber}`, 360, 295);
 
-    // Countdown 3, 2, 1, GO!
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 22;
     if (countdown > 0.3) {
       const num = Math.ceil(countdown);
       ctx.fillStyle = '#f59e0b';
       ctx.shadowColor = '#f59e0b';
       ctx.font = '900 84px system-ui';
-      ctx.fillText(num.toString(), 360, 370);
+      ctx.fillText(num.toString(), 360, 365);
     } else {
       ctx.fillStyle = '#22c55e';
       ctx.shadowColor = '#22c55e';
       ctx.font = '900 96px system-ui';
-      ctx.fillText('GO!', 360, 370);
+      ctx.fillText('GO!', 360, 365);
     }
 
     ctx.restore();
@@ -316,19 +360,19 @@ export class UIOverlay {
     const winnerName = winnerId === 1 ? 'P1 藍色選手' : (isAiMode ? 'AI 電腦' : 'P2 紅色選手');
     const color = winnerId === 1 ? '#38bdf8' : '#fb7185';
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-    ctx.fillRect(0, 290, 720, 140);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillRect(0, 285, 720, 150);
 
     ctx.shadowColor = color;
-    ctx.shadowBlur = 20;
+    ctx.shadowBlur = 24;
     ctx.fillStyle = color;
     ctx.font = '900 42px system-ui';
-    ctx.fillText(`${winnerName} 回合獲勝！`, 360, 340);
+    ctx.fillText(`${winnerName} 回合獲勝！`, 360, 335);
 
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 20px system-ui';
-    ctx.fillText('+1 POINT', 360, 390);
+    ctx.fillText('+1 POINT', 360, 385);
 
     ctx.restore();
   }
@@ -347,26 +391,24 @@ export class UIOverlay {
     const winnerName = winnerId === 1 ? 'P1 藍色車手' : (isAiMode ? 'AI 電腦' : 'P2 紅色車手');
     const color = winnerId === 1 ? '#38bdf8' : '#fb7185';
 
-    // Trophy icon
     ctx.font = '72px system-ui';
-    ctx.fillText('🏆', 360, 160);
+    ctx.fillText('🏆', 360, 155);
 
-    // Title
     ctx.shadowColor = color;
     ctx.shadowBlur = 25;
     ctx.fillStyle = color;
     ctx.font = '900 44px system-ui';
-    ctx.fillText(`${winnerName} 獲得冠軍！`, 360, 240);
+    ctx.fillText(`${winnerName} 獲得總冠軍！`, 360, 235);
 
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 26px monospace';
-    ctx.fillText(`最終比分  ${p1Score} : ${p2Score}`, 360, 290);
+    ctx.fillText(`最終比分  ${p1Score} : ${p2Score}`, 360, 285);
 
     if (streak !== undefined && streak > 0) {
       ctx.fillStyle = '#fbbf24';
       ctx.font = 'bold 18px system-ui';
-      ctx.fillText(`🔥 當前連勝: ${streak} 連勝`, 360, 325);
+      ctx.fillText(`🔥 當前連勝: ${streak} 連勝`, 360, 320);
     }
 
     ctx.restore();

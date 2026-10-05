@@ -8,11 +8,27 @@ export type GameState =
 
 export type GameMode = '1P_AI' | '2P_LOCAL';
 export type AIDifficulty = 'easy' | 'normal' | 'hard';
-export type ItemType = 'heavy' | 'rocket' | 'oil' | 'bomb';
+export type ArenaTheme = 'classic' | 'frost' | 'magma';
+export type ItemType = 'heavy' | 'rocket' | 'oil' | 'bomb' | 'emp' | 'anchor';
 
 export interface Vector2D {
   x: number;
   y: number;
+}
+
+export interface ArenaThemeConfig {
+  id: ArenaTheme;
+  name: string;
+  subname: string;
+  description: string;
+  friction: number;
+  restitution: number;
+  suddenDeathTime: number;
+  collapseSpeed: number;
+  rimColor: string;
+  warningColor: string;
+  bgColor: string;
+  floorGradient: [string, string, string];
 }
 
 export interface SumoSaveData {
@@ -28,6 +44,7 @@ export interface SumoSaveData {
   settings: {
     soundMuted: boolean;
     aiDifficulty: AIDifficulty;
+    selectedArena: ArenaTheme;
     mirrorP2View: boolean;
   };
 }

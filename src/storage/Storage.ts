@@ -16,6 +16,7 @@ export class StorageManager {
     settings: {
       soundMuted: false,
       aiDifficulty: 'normal',
+      selectedArena: 'classic',
       mirrorP2View: false,
     },
   };

@@ -1,4 +1,4 @@
-import { GameState, GameMode, AIDifficulty, SumoSaveData } from '../types';
+import { GameState, GameMode, AIDifficulty, ArenaTheme, SumoSaveData } from '../types';
 import { InputManager } from './Input';
 import { Physics } from './Physics';
 import { Arena } from '../entities/Arena';
@@ -18,6 +18,7 @@ export class Game {
   private state: GameState = 'TITLE';
   private gameMode: GameMode = '1P_AI';
   private aiDifficulty: AIDifficulty = 'normal';
+  private selectedArena: ArenaTheme = 'classic';
 
   private input: InputManager;
   private arena: Arena;
@@ -33,13 +34,13 @@ export class Game {
   // Round & Score management
   private p1Score: number = 0;
   private p2Score: number = 0;
-  private targetScore: number = 3; // First to 3 (BO5)
+  private targetScore: number = 3; // First to 3
   private currentRound: number = 1;
   private roundTimer: number = 0;
   private countdownTimer: number = 3.2; // 3, 2, 1, GO
   private roundOverTimer: number = 0;
   private roundWinner: 1 | 2 = 1;
- 
+
   // Playroom Leaderboard run state
   private currentRunId: string | null = null;
   private currentRunPromise: Promise<{ runId: string } | null> | null = null;
@@ -61,9 +62,10 @@ export class Game {
     this.saveData = StorageManager.load();
     SoundEffects.setMuted(this.saveData.settings.soundMuted);
     this.aiDifficulty = this.saveData.settings.aiDifficulty;
+    this.selectedArena = this.saveData.settings.selectedArena || 'classic';
 
     this.input = new InputManager(canvas);
-    this.arena = new Arena();
+    this.arena = new Arena(this.selectedArena);
     this.p1Car = new Car(1);
     this.p2Car = new Car(2);
     this.items = new ItemManager();
@@ -127,9 +129,9 @@ export class Game {
     this.ui.addButton({
       id: 'btn_1p',
       x: 210,
-      y: 255,
+      y: 240,
       w: 300,
-      h: 56,
+      h: 54,
       text: '挑戰電腦 (1P vs AI)',
       subtext: `當前難度: ${this.getDifficultyName()}`,
       color: '#0284c7',
@@ -143,10 +145,10 @@ export class Game {
     this.ui.addButton({
       id: 'btn_diff',
       x: 210,
-      y: 325,
+      y: 305,
       w: 300,
       h: 46,
-      text: `切換難度: ${this.getDifficultyName()}`,
+      text: `AI 難度: ${this.getDifficultyName()}`,
       color: '#334155',
       hoverColor: '#475569',
       onClick: () => {
@@ -161,15 +163,37 @@ export class Game {
       },
     });
 
+    // Arena Theme toggle
+    this.ui.addButton({
+      id: 'btn_arena',
+      x: 210,
+      y: 360,
+      w: 300,
+      h: 46,
+      text: `擂台主題: ${this.getArenaName()}`,
+      color: this.selectedArena === 'magma' ? '#7f1d1d' : (this.selectedArena === 'frost' ? '#0e7490' : '#475569'),
+      hoverColor: this.selectedArena === 'magma' ? '#991b1b' : (this.selectedArena === 'frost' ? '#0891b2' : '#64748b'),
+      onClick: () => {
+        if (this.selectedArena === 'classic') this.selectedArena = 'frost';
+        else if (this.selectedArena === 'frost') this.selectedArena = 'magma';
+        else this.selectedArena = 'classic';
+
+        this.arena.setTheme(this.selectedArena);
+        this.saveData.settings.selectedArena = this.selectedArena;
+        StorageManager.save(this.saveData);
+        this.setupTitleUI();
+      },
+    });
+
     // Mode: 2P Local
     this.ui.addButton({
       id: 'btn_2p',
       x: 210,
-      y: 385,
+      y: 418,
       w: 300,
-      h: 56,
+      h: 54,
       text: '雙人同機 (1P vs 2P)',
-      subtext: '鍵盤 A / L 鍵 或 觸控兩端',
+      subtext: '鍵盤 A / L 鍵 或 觸控螢幕兩側',
       color: '#e11d48',
       hoverColor: '#be123c',
       onClick: () => {
@@ -195,9 +219,15 @@ export class Game {
   }
 
   private getDifficultyName(): string {
-    if (this.aiDifficulty === 'easy') return '簡單 (Easy)';
-    if (this.aiDifficulty === 'normal') return '普通 (Normal)';
-    return '相撲大師 (Master)';
+    if (this.aiDifficulty === 'easy') return '輕鬆 (Casual)';
+    if (this.aiDifficulty === 'normal') return '老手 (Veteran)';
+    return '相撲宗師 (Grandmaster)';
+  }
+
+  private getArenaName(): string {
+    if (this.selectedArena === 'classic') return '經典水泥';
+    if (this.selectedArena === 'frost') return '極地溜冰場';
+    return '熔岩工廠';
   }
 
   private initTitleDemo() {
@@ -297,8 +327,11 @@ export class Game {
 
     if (this.state === 'IN_ROUND') {
       this.roundTimer += dt;
-      this.arena.update(dt, this.roundTimer);
+      this.arena.update(dt, this.roundTimer, this.particles);
       this.items.update(dt, this.arena.currentRadius, this.arena.center);
+
+      // Check proximity of cars to edge for hazard light warning
+      this.arena.checkEdgeDanger([this.p1Car.pos, this.p2Car.pos]);
 
       // 1. Gather player inputs
       const p1In = this.input.getP1Input();
@@ -314,9 +347,10 @@ export class Game {
       const p1Slope = this.arena.getEdgeSlopeForce(this.p1Car.pos, this.p1Car.currentRadius);
       const p2Slope = this.arena.getEdgeSlopeForce(this.p2Car.pos, this.p2Car.currentRadius);
 
-      // 3. Update Car physics
-      this.p1Car.update(dt, p1In.holding, p1Slope, this.particles);
-      this.p2Car.update(dt, p2Held, p2Slope, this.particles);
+      // 3. Update Car physics with Arena Theme friction
+      const arenaConfig = this.arena.getThemeConfig();
+      this.p1Car.update(dt, p1In.holding, p1Slope, this.particles, arenaConfig.friction);
+      this.p2Car.update(dt, p2Held, p2Slope, this.particles, arenaConfig.friction);
 
       // 4. Car-to-Car Collision Resolution
       if (!this.p1Car.isFalling && !this.p2Car.isFalling) {
@@ -331,13 +365,24 @@ export class Game {
           this.p2Car.currentMass,
           this.p2Car.currentRadius,
           this.p2Car.angle,
-          1.28
+          arenaConfig.restitution
         );
 
         if (col.collided) {
-          SoundEffects.playClang(col.relativeSpeed / 200);
-          this.particles.addSparks(col.contactPoint, 16, '#ffd700');
-          this.particles.triggerShake(Math.min(col.relativeSpeed * 0.03, 10), 0.15);
+          SoundEffects.playClang(col.relativeSpeed / 160);
+
+          // Intense sparks & expanding shockwave ring
+          this.particles.addIntenseCollisionSparks(col.contactPoint, 26, col.relativeSpeed / 180);
+          this.particles.addShockwave(
+            col.contactPoint,
+            70 + Math.min(100, col.relativeSpeed * 0.25),
+            '#ffd700'
+          );
+          this.particles.triggerShake(Math.min(col.relativeSpeed * 0.045, 14), 0.18);
+
+          // Apply squash & stretch impact deformation
+          this.p1Car.applyDeformation(col.normal, col.relativeSpeed);
+          this.p2Car.applyDeformation({ x: -col.normal.x, y: -col.normal.y }, col.relativeSpeed);
 
           // Reverse rotation directions on bump
           this.p1Car.reverseSpin();
@@ -346,11 +391,11 @@ export class Game {
           // Weak spot hit penalties
           if (col.weakSpotHitP1) {
             this.p1Car.triggerWeakSpotStun();
-            this.particles.addSparks(this.p1Car.pos, 10, '#38bdf8');
+            this.particles.addIntenseCollisionSparks(this.p1Car.pos, 14, 1.2);
           }
           if (col.weakSpotHitP2) {
             this.p2Car.triggerWeakSpotStun();
-            this.particles.addSparks(this.p2Car.pos, 10, '#fb7185');
+            this.particles.addIntenseCollisionSparks(this.p2Car.pos, 14, 1.2);
           }
 
           // Hot potato bomb transfer
@@ -374,10 +419,14 @@ export class Game {
         SoundEffects.playItemPickup();
         if (p1Item === 'oil') {
           this.items.addOilPuddle(this.p1Car.pos);
+        } else if (p1Item === 'emp') {
+          SoundEffects.playEmpShock();
+          this.particles.addEmpShockwave(this.p1Car.pos, 220);
+          this.p2Car.triggerEmpStun();
         } else {
           this.p1Car.applyItem(p1Item);
         }
-        this.particles.addSparks(this.p1Car.pos, 14, '#38bdf8');
+        this.particles.addIntenseCollisionSparks(this.p1Car.pos, 18, 0.9);
       }
 
       const p2Item = this.items.checkCollisionsWithCar(this.p2Car.pos, this.p2Car.currentRadius);
@@ -385,10 +434,14 @@ export class Game {
         SoundEffects.playItemPickup();
         if (p2Item === 'oil') {
           this.items.addOilPuddle(this.p2Car.pos);
+        } else if (p2Item === 'emp') {
+          SoundEffects.playEmpShock();
+          this.particles.addEmpShockwave(this.p2Car.pos, 220);
+          this.p1Car.triggerEmpStun();
         } else {
           this.p2Car.applyItem(p2Item);
         }
-        this.particles.addSparks(this.p2Car.pos, 14, '#fb7185');
+        this.particles.addIntenseCollisionSparks(this.p2Car.pos, 18, 0.9);
       }
 
       // 6. Oil puddle check
@@ -419,8 +472,9 @@ export class Game {
         this.onCarFell(1); // P1 wins round
       }
     } else if (this.state === 'ROUND_OVER') {
-      this.p1Car.update(dt, false, { x: 0, y: 0 }, this.particles);
-      this.p2Car.update(dt, false, { x: 0, y: 0 }, this.particles);
+      const arenaConfig = this.arena.getThemeConfig();
+      this.p1Car.update(dt, false, { x: 0, y: 0 }, this.particles, arenaConfig.friction);
+      this.p2Car.update(dt, false, { x: 0, y: 0 }, this.particles, arenaConfig.friction);
 
       this.roundOverTimer += dt;
       if (this.roundOverTimer >= 2.0) {
@@ -437,18 +491,18 @@ export class Game {
   private explodeBomb(carrier: Car, other: Car) {
     carrier.hasBomb = false;
     SoundEffects.playExplosion();
-    this.particles.addShockwave(carrier.pos, 140, '#ef4444');
-    this.particles.triggerShake(14, 0.35);
+    this.particles.addShockwave(carrier.pos, 150, '#ef4444');
+    this.particles.triggerShake(16, 0.4);
 
-    // Blast carrier far outward
+    // Blast carrier outward
     const blastDir = Physics.normalize(Physics.sub(carrier.pos, this.arena.center));
-    carrier.vel = Physics.scale(blastDir, 850);
+    carrier.vel = Physics.scale(blastDir, 880);
 
     // Blast other car if nearby
     const dist = Physics.dist(carrier.pos, other.pos);
-    if (dist < 140) {
+    if (dist < 150) {
       const otherDir = Physics.normalize(Physics.sub(other.pos, carrier.pos));
-      other.vel = Physics.scale(otherDir, 550);
+      other.vel = Physics.scale(otherDir, 580);
     }
   }
 
@@ -527,13 +581,14 @@ export class Game {
   }
 
   private updateTitleDemo(dt: number) {
-    this.arena.update(dt, 0);
+    this.arena.update(dt, 0, this.particles);
 
     const p1Held = this.titleAiP1.update(dt, this.p1Car, this.p2Car, this.arena, this.items);
     const p2Held = this.titleAiP2.update(dt, this.p2Car, this.p1Car, this.arena, this.items);
 
-    this.p1Car.update(dt, p1Held, { x: 0, y: 0 }, this.particles);
-    this.p2Car.update(dt, p2Held, { x: 0, y: 0 }, this.particles);
+    const arenaConfig = this.arena.getThemeConfig();
+    this.p1Car.update(dt, p1Held, { x: 0, y: 0 }, this.particles, arenaConfig.friction);
+    this.p2Car.update(dt, p2Held, { x: 0, y: 0 }, this.particles, arenaConfig.friction);
 
     // Demo collision
     Physics.resolveCircleCollision(
@@ -547,7 +602,7 @@ export class Game {
       this.p2Car.currentMass,
       this.p2Car.currentRadius,
       this.p2Car.angle,
-      1.15
+      arenaConfig.restitution
     );
 
     // Keep cars inside arena for demo
@@ -586,11 +641,19 @@ export class Game {
     this.ctx.restore();
 
     // 5. Draw UI Overlay
+    const touchPoints = this.input.getActiveTouchPoints();
+
     if (this.state === 'TITLE') {
-      this.ui.drawTitleScreen(this.ctx, this.saveData.stats);
+      this.ui.drawTitleScreen(this.ctx, this.saveData.stats, this.selectedArena);
       this.ui.drawButtons(this.ctx);
     } else if (this.state === 'ROUND_READY') {
-      this.ui.drawTouchIndicators(this.ctx, this.p1Car.isHolding, this.p2Car.isHolding, this.gameMode);
+      this.ui.drawTouchIndicators(
+        this.ctx,
+        this.p1Car.isHolding,
+        this.p2Car.isHolding,
+        this.gameMode,
+        touchPoints
+      );
       this.ui.drawHUD(
         this.ctx,
         this.p1Score,
@@ -599,11 +662,19 @@ export class Game {
         this.roundTimer,
         this.arena.isSuddenDeath,
         this.gameMode,
-        SoundEffects.isMuted()
+        SoundEffects.isMuted(),
+        this.selectedArena,
+        this.aiDifficulty
       );
       this.ui.drawRoundCountdown(this.ctx, this.currentRound, this.countdownTimer);
     } else if (this.state === 'IN_ROUND') {
-      this.ui.drawTouchIndicators(this.ctx, this.p1Car.isHolding, this.p2Car.isHolding, this.gameMode);
+      this.ui.drawTouchIndicators(
+        this.ctx,
+        this.p1Car.isHolding,
+        this.p2Car.isHolding,
+        this.gameMode,
+        touchPoints
+      );
       this.ui.drawHUD(
         this.ctx,
         this.p1Score,
@@ -612,7 +683,9 @@ export class Game {
         this.roundTimer,
         this.arena.isSuddenDeath,
         this.gameMode,
-        SoundEffects.isMuted()
+        SoundEffects.isMuted(),
+        this.selectedArena,
+        this.aiDifficulty
       );
     } else if (this.state === 'ROUND_OVER') {
       this.ui.drawHUD(
@@ -623,7 +696,9 @@ export class Game {
         this.roundTimer,
         this.arena.isSuddenDeath,
         this.gameMode,
-        SoundEffects.isMuted()
+        SoundEffects.isMuted(),
+        this.selectedArena,
+        this.aiDifficulty
       );
       this.ui.drawRoundOver(this.ctx, this.roundWinner, this.gameMode === '1P_AI');
     } else if (this.state === 'MATCH_OVER') {

@@ -62,6 +62,7 @@ export class Physics {
     contactPoint: Vector2D;
     normal: Vector2D;
     relativeSpeed: number;
+    impulse: number;
     weakSpotHitP1: boolean; // P1 was struck in rear/side
     weakSpotHitP2: boolean; // P2 was struck in rear/side
   } {
@@ -75,6 +76,7 @@ export class Physics {
         contactPoint: { x: 0, y: 0 },
         normal: { x: 1, y: 0 },
         relativeSpeed: 0,
+        impulse: 0,
         weakSpotHitP1: false,
         weakSpotHitP2: false,
       };
@@ -111,6 +113,7 @@ export class Physics {
         contactPoint,
         normal: n,
         relativeSpeed: 0,
+        impulse: 0,
         weakSpotHitP1: false,
         weakSpotHitP2: false,
       };
@@ -147,6 +150,7 @@ export class Physics {
       contactPoint,
       normal: n,
       relativeSpeed: velAlongNormal,
+      impulse: impulseScalar,
       weakSpotHitP1,
       weakSpotHitP2,
     };

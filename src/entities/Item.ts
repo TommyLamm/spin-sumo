@@ -22,12 +22,12 @@ export class ItemManager {
   public boxes: MysteryBox[] = [];
   public puddles: OilPuddle[] = [];
   private nextBoxId: number = 1;
-  private spawnCooldown: number = 6.0; // Spawns after 6s in round
+  private spawnCooldown: number = 5.0; // Spawns after 5s
 
   public reset() {
     this.boxes = [];
     this.puddles = [];
-    this.spawnCooldown = 6.0;
+    this.spawnCooldown = 5.0;
   }
 
   public update(dt: number, arenaRadius: number, arenaCenter: Vector2D) {
@@ -35,7 +35,7 @@ export class ItemManager {
     this.spawnCooldown -= dt;
     if (this.spawnCooldown <= 0 && this.boxes.length === 0) {
       this.spawnMysteryBox(arenaRadius, arenaCenter);
-      this.spawnCooldown = 9.0; // next box in 9s after this one is gone
+      this.spawnCooldown = 8.0; // next box in 8s after this one is gone
     }
 
     // 2. Mystery Box animation
@@ -53,10 +53,11 @@ export class ItemManager {
   }
 
   private spawnMysteryBox(arenaRadius: number, arenaCenter: Vector2D) {
-    const types: ItemType[] = ['heavy', 'rocket', 'oil', 'bomb'];
+    // Prioritize new exciting items: EMP Shockwave & Heavy Anchor!
+    const types: ItemType[] = ['anchor', 'emp', 'rocket', 'oil', 'bomb', 'anchor', 'emp'];
     const chosenType = types[Math.floor(Math.random() * types.length)];
 
-    // Spawn randomly inside 65% of arena radius
+    // Spawn inside 65% of arena radius
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.random() * (arenaRadius * 0.6);
 
@@ -74,7 +75,7 @@ export class ItemManager {
     this.puddles.push({
       x: pos.x,
       y: pos.y,
-      radius: 35,
+      radius: 36,
       life: 10.0,
       maxLife: 10.0,
     });
@@ -125,16 +126,43 @@ export class ItemManager {
     // 2. Draw Mystery Boxes
     for (const box of this.boxes) {
       ctx.save();
-      const floatY = box.y + Math.sin(box.bobTimer * 4) * 5;
+      const floatY = box.y + Math.sin(box.bobTimer * 4) * 6;
       const size = box.radius * 2;
 
-      // Glow shadow
-      ctx.shadowColor = '#38bdf8';
-      ctx.shadowBlur = 12;
+      let boxColor = '#0284c7';
+      let strokeColor = '#38bdf8';
+      let symbol = '?';
 
-      // Box cube
-      ctx.fillStyle = '#0284c7';
-      ctx.strokeStyle = '#38bdf8';
+      if (box.itemType === 'anchor') {
+        boxColor = '#854d0e';
+        strokeColor = '#eab308';
+        symbol = '⚓';
+      } else if (box.itemType === 'emp') {
+        boxColor = '#1e1b4b';
+        strokeColor = '#38bdf8';
+        symbol = '⚡';
+      } else if (box.itemType === 'rocket') {
+        boxColor = '#c2410c';
+        strokeColor = '#fb923c';
+        symbol = '▲';
+      } else if (box.itemType === 'oil') {
+        boxColor = '#3b0764';
+        strokeColor = '#c084fc';
+        symbol = '●';
+      } else if (box.itemType === 'bomb') {
+        boxColor = '#991b1b';
+        strokeColor = '#f87171';
+        symbol = '✹';
+      }
+
+      // Dynamic outer pulse glow
+      const pulse = (Math.sin(box.bobTimer * 6) + 1) * 0.5;
+      ctx.shadowColor = strokeColor;
+      ctx.shadowBlur = 10 + pulse * 10;
+
+      // Box shape
+      ctx.fillStyle = boxColor;
+      ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.roundRect(box.x - box.radius, floatY - box.radius, size, size, 8);
@@ -144,17 +172,11 @@ export class ItemManager {
       // Item icon / Symbol
       ctx.shadowBlur = 0;
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 18px monospace';
+      ctx.font = 'bold 18px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-
-      let symbol = '?';
-      if (box.itemType === 'heavy') symbol = '★'; // Titan
-      if (box.itemType === 'rocket') symbol = '▲'; // Rocket
-      if (box.itemType === 'oil') symbol = '●'; // Oil
-      if (box.itemType === 'bomb') symbol = '✹'; // Bomb
-
       ctx.fillText(symbol, box.x, floatY);
+
       ctx.restore();
     }
   }
