@@ -10,6 +10,7 @@ export class StorageManager {
       p1Wins: 0,
       p2Wins: 0,
       aiWins: 0,
+      tournamentsWon: 0,
       highestStreak: 0,
       currentStreak: 0,
     },
@@ -17,7 +18,8 @@ export class StorageManager {
       soundMuted: false,
       aiDifficulty: 'normal',
       selectedArena: 'classic',
-      mirrorP2View: false,
+      p1Class: 'classic',
+      p2Class: 'classic',
     },
   };
 
@@ -29,8 +31,17 @@ export class StorageManager {
       if (parsed && parsed.version === 1) {
         return {
           version: 1,
-          stats: { ...this.defaultData.stats, ...parsed.stats },
-          settings: { ...this.defaultData.settings, ...parsed.settings },
+          stats: {
+            ...this.defaultData.stats,
+            ...parsed.stats,
+            tournamentsWon: parsed.stats?.tournamentsWon ?? 0,
+          },
+          settings: {
+            ...this.defaultData.settings,
+            ...parsed.settings,
+            p1Class: parsed.settings?.p1Class ?? 'classic',
+            p2Class: parsed.settings?.p2Class ?? 'classic',
+          },
         };
       }
     } catch (e) {
@@ -66,6 +77,19 @@ export class StorageManager {
       }
     }
 
+    this.save(data);
+    return data;
+  }
+
+  public static recordTournamentWin(): SumoSaveData {
+    const data = this.load();
+    data.stats.tournamentsWon = (data.stats.tournamentsWon || 0) + 1;
+    data.stats.matchesPlayed += 1;
+    data.stats.p1Wins += 1;
+    data.stats.currentStreak += 1;
+    if (data.stats.currentStreak > data.stats.highestStreak) {
+      data.stats.highestStreak = data.stats.currentStreak;
+    }
     this.save(data);
     return data;
   }

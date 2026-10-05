@@ -94,6 +94,100 @@ export class ParticleSystem {
     });
   }
 
+  public addTwinExhaust(pos: Vector2D, angle: number, radius: number) {
+    const forward = { x: Math.cos(angle), y: Math.sin(angle) };
+    const right = { x: -Math.sin(angle), y: Math.cos(angle) };
+    const rearDist = radius * 0.85;
+    const nozzleSpread = radius * 0.55;
+
+    const rearCenterX = pos.x - forward.x * rearDist;
+    const rearCenterY = pos.y - forward.y * rearDist;
+
+    const nozzle1 = {
+      x: rearCenterX + right.x * nozzleSpread,
+      y: rearCenterY + right.y * nozzleSpread,
+    };
+    const nozzle2 = {
+      x: rearCenterX - right.x * nozzleSpread,
+      y: rearCenterY - right.y * nozzleSpread,
+    };
+
+    for (const nPos of [nozzle1, nozzle2]) {
+      const oppAngle = angle + Math.PI + (Math.random() - 0.5) * 0.35;
+      const speed = 240 + Math.random() * 140;
+      this.particles.push({
+        x: nPos.x,
+        y: nPos.y,
+        vx: Math.cos(oppAngle) * speed,
+        vy: Math.sin(oppAngle) * speed,
+        life: 0.32,
+        maxLife: 0.32,
+        size: 7 + Math.random() * 4,
+        color: Math.random() > 0.4 ? '#38bdf8' : '#818cf8', // High-tech cyan-violet plasma jet
+        type: 'fire',
+      });
+    }
+  }
+
+  public addNuclearExplosion(pos: Vector2D) {
+    // 1. Triple expanding shockwaves
+    this.addShockwave(pos, 280, '#ef4444');
+    this.addShockwave(pos, 200, '#f97316');
+    this.addShockwave(pos, 130, '#fef08a');
+
+    // 2. High density fireball center
+    for (let i = 0; i < 40; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 60 + Math.random() * 260;
+      this.particles.push({
+        x: pos.x,
+        y: pos.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 40,
+        life: 0.6 + Math.random() * 0.5,
+        maxLife: 1.1,
+        size: 16 + Math.random() * 16,
+        color: Math.random() > 0.5 ? '#f97316' : (Math.random() > 0.3 ? '#ef4444' : '#facc15'),
+        type: 'fire',
+      });
+    }
+
+    // 3. Dense black mushroom smoke plume
+    for (let i = 0; i < 35; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 40 + Math.random() * 180;
+      this.particles.push({
+        x: pos.x + (Math.random() - 0.5) * 30,
+        y: pos.y + (Math.random() - 0.5) * 30,
+        vx: Math.cos(angle) * speed * 0.7,
+        vy: Math.sin(angle) * speed * 0.7 - 80, // rising
+        life: 0.8 + Math.random() * 0.7,
+        maxLife: 1.5,
+        size: 20 + Math.random() * 20,
+        color: Math.random() > 0.5 ? '#1e293b' : '#334155',
+        type: 'smoke',
+      });
+    }
+
+    // 4. White-hot nuclear debris sparks
+    for (let i = 0; i < 50; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 180 + Math.random() * 450;
+      this.particles.push({
+        x: pos.x,
+        y: pos.y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 0.5 + Math.random() * 0.5,
+        maxLife: 1.0,
+        size: 4 + Math.random() * 4,
+        color: '#ffffff',
+        secondaryColor: '#f97316',
+        type: 'spark',
+      });
+    }
+  }
+
   public addShockwave(pos: Vector2D, maxRadius: number = 110, color: string = '#f59e0b') {
     this.particles.push({
       x: pos.x,

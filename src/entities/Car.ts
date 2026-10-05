@@ -1,7 +1,70 @@
-import { Vector2D, ItemType } from '../types';
+import { Vector2D, ItemType, VehicleClassId, VehicleClassConfig } from '../types';
 import { Physics } from '../core/Physics';
 import { ParticleSystem } from './Particles';
 import { SoundEffects } from '../audio/SoundEffects';
+
+export const VEHICLE_CLASSES: Record<VehicleClassId, VehicleClassConfig> = {
+  classic: {
+    id: 'classic',
+    name: '經典平衡型',
+    nameEn: 'Classic Sumo',
+    tag: '全能均衡',
+    description: '標準相撲碰碰車，各項物理數值均衡穩定，適應所有擂台。',
+    icon: '⚖️',
+    badgeColor: '#38bdf8',
+    massMultiplier: 1.0,
+    speedMultiplier: 1.0,
+    accelMultiplier: 1.0,
+    spinMultiplier: 1.0,
+    driftFactor: 1.0,
+    radiusBonus: 0,
+  },
+  speedster: {
+    id: 'speedster',
+    name: '極速刺客',
+    nameEn: 'Speedster',
+    tag: '極速旋風',
+    description: '轉向極快、衝刺速度 +25%，機動性極強，但車身較輕易受擊退。',
+    icon: '⚡',
+    badgeColor: '#a855f7',
+    massMultiplier: 0.78,
+    speedMultiplier: 1.25,
+    accelMultiplier: 1.25,
+    spinMultiplier: 1.35,
+    driftFactor: 1.0,
+    radiusBonus: -2,
+  },
+  juggernaut: {
+    id: 'juggernaut',
+    name: '裝甲巨獸',
+    nameEn: 'Juggernaut',
+    tag: '重裝泰坦',
+    description: '質量 +50%、撞擊抗擊退極高，厚重裝甲宛如巨獸，衝刺轉向稍慢。',
+    icon: '🛡️',
+    badgeColor: '#eab308',
+    massMultiplier: 1.50,
+    speedMultiplier: 0.85,
+    accelMultiplier: 0.85,
+    spinMultiplier: 0.80,
+    driftFactor: 0.95,
+    radiusBonus: 3,
+  },
+  drifter: {
+    id: 'drifter',
+    name: '漂移之王',
+    nameEn: 'Drifter',
+    tag: '雙渦輪噴射',
+    description: '甩尾摩擦極小、衝刺自帶雙渦輪噴射尾焰，靈動飄逸難以捉摸。',
+    icon: '🔥',
+    badgeColor: '#f97316',
+    massMultiplier: 0.95,
+    speedMultiplier: 1.12,
+    accelMultiplier: 1.15,
+    spinMultiplier: 1.18,
+    driftFactor: 1.035,
+    radiusBonus: 0,
+  },
+};
 
 export class Car {
   public id: 1 | 2;
@@ -9,6 +72,8 @@ export class Car {
   public vel: Vector2D;
   public angle: number; // In radians
   public spinDir: 1 | -1; // 1: clockwise, -1: counter-clockwise
+
+  public vehicleClass: VehicleClassId = 'classic';
 
   public baseRadius: number = 26;
   public currentRadius: number = 26;
@@ -48,7 +113,7 @@ export class Car {
   public colorSecondary: string;
   public colorGlow: string;
 
-  constructor(id: 1 | 2) {
+  constructor(id: 1 | 2, vehicleClass: VehicleClassId = 'classic') {
     this.id = id;
     this.pos = { x: 0, y: 0 };
     this.vel = { x: 0, y: 0 };
@@ -64,6 +129,23 @@ export class Car {
       this.colorSecondary = '#fb7185';
       this.colorGlow = 'rgba(251, 113, 133, 0.4)';
     }
+
+    this.setVehicleClass(vehicleClass);
+  }
+
+  public setVehicleClass(vClass: VehicleClassId) {
+    this.vehicleClass = vClass;
+    const cfg = VEHICLE_CLASSES[vClass] || VEHICLE_CLASSES.classic;
+
+    this.baseRadius = 26 + cfg.radiusBonus;
+    this.currentRadius = this.baseRadius;
+
+    this.baseMass = 1.0 * cfg.massMultiplier;
+    this.currentMass = this.baseMass;
+
+    this.baseSpinSpeed = ((420 * Math.PI) / 180) * cfg.spinMultiplier;
+    this.baseAccel = 1350 * cfg.accelMultiplier;
+    this.baseMaxSpeed = 420 * cfg.speedMultiplier;
   }
 
   public reset(spawnPos: Vector2D, spawnAngle: number) {
@@ -72,8 +154,10 @@ export class Car {
     this.angle = spawnAngle;
     this.spinDir = this.id === 1 ? 1 : -1;
 
-    this.currentRadius = this.baseRadius;
-    this.currentMass = this.baseMass;
+    const cfg = VEHICLE_CLASSES[this.vehicleClass] || VEHICLE_CLASSES.classic;
+    this.currentRadius = 26 + cfg.radiusBonus;
+    this.currentMass = 1.0 * cfg.massMultiplier;
+
     this.isHolding = false;
     this.isFalling = false;
     this.fallScale = 1.0;
@@ -98,7 +182,7 @@ export class Car {
       this.activeBuff = 'anchor';
       this.buffTimer = 6.0;
       this.currentRadius = this.baseRadius * 1.35;
-      this.currentMass = this.baseMass * 4.0; // +300% mass increase!
+      this.currentMass = this.baseMass * 3.8;
       SoundEffects.playAnchorEquip();
     } else if (item === 'heavy') {
       this.activeBuff = 'heavy';
@@ -118,9 +202,7 @@ export class Car {
   }
 
   public applyDeformation(normal: Vector2D, relativeSpeed: number) {
-    // Normal is collision contact normal
     this.deformationAngle = Math.atan2(normal.y, normal.x);
-    // Squash scale up to 0.35
     const intensity = Math.min(0.35, (relativeSpeed / 500) * 0.35);
     this.deformationAmount = Math.max(this.deformationAmount, intensity);
   }
@@ -130,7 +212,7 @@ export class Car {
   }
 
   public triggerEmpStun() {
-    this.empStunTimer = 1.2; // 1.2 seconds paralysis
+    this.empStunTimer = 1.2;
   }
 
   public triggerOilSlip() {
@@ -157,7 +239,7 @@ export class Car {
       return;
     }
 
-    // 1. Squash & Stretch deformation recovery
+    // 1. Squash & Stretch recovery
     if (this.deformationAmount > 0) {
       this.deformationAmount = Math.max(0, this.deformationAmount - dt * 3.2);
     }
@@ -186,9 +268,7 @@ export class Car {
       this.empStunTimer -= dt;
       isStunned = true;
       inputHeld = false;
-      // Glitchy erratic spin
       this.angle += this.spinDir * 24 * dt;
-      // Electric arc particles around chassis
       if (Math.random() < 0.3) {
         const pAngle = Math.random() * Math.PI * 2;
         const offset = {
@@ -227,14 +307,20 @@ export class Car {
     if (inputHeld && !isSlipping && !isStunned) {
       this.vel.x += forward.x * accel * dt;
       this.vel.y += forward.y * accel * dt;
-      particles.addExhaust(this.pos, this.angle, isRocket);
+
+      // Special exhaust: Drifter has twin turbo flame!
+      if (this.vehicleClass === 'drifter') {
+        particles.addTwinExhaust(this.pos, this.angle, this.currentRadius);
+      } else {
+        particles.addExhaust(this.pos, this.angle, isRocket);
+      }
     } else {
       // Spinning in place
       const spinMult = isAnchor ? 0.75 : (this.activeBuff === 'heavy' ? 0.85 : 1.0);
       this.angle += this.spinDir * this.baseSpinSpeed * spinMult * dt;
     }
 
-    // 6. Arena slope outward force
+    // 6. Slope outward force
     this.vel.x += slopeForce.x * dt;
     this.vel.y += slopeForce.y * dt;
 
@@ -246,8 +332,13 @@ export class Car {
       this.vel.y = normalizedVel.y * maxSpeed;
     }
 
-    // 8. Ground friction (arena theme specific)
-    const effectiveFriction = isSlipping ? 0.99 : arenaFriction;
+    // 8. Ground friction
+    const cfg = VEHICLE_CLASSES[this.vehicleClass] || VEHICLE_CLASSES.classic;
+    let effectiveFriction = isSlipping ? 0.99 : arenaFriction;
+    if (cfg.driftFactor !== 1.0 && !isSlipping) {
+      effectiveFriction = Math.min(0.992, effectiveFriction * cfg.driftFactor);
+    }
+
     const decay = Math.pow(effectiveFriction, 60 * dt);
     this.vel.x *= decay;
     this.vel.y *= decay;
@@ -255,7 +346,8 @@ export class Car {
     // 9. Tire Skidmarks generation (Drifting & Burnout)
     this.skidCooldown -= dt;
     const lateralSpeed = Math.abs(Physics.dot(this.vel, right));
-    const isDrifting = (lateralSpeed > 75 && currentSpeed > 90) || isSlipping || (currentSpeed > 220 && !inputHeld);
+    const driftThreshold = this.vehicleClass === 'drifter' ? 55 : 75;
+    const isDrifting = (lateralSpeed > driftThreshold && currentSpeed > 85) || isSlipping || (currentSpeed > 220 && !inputHeld);
 
     if (isDrifting && this.skidCooldown <= 0) {
       this.skidCooldown = 0.04;
@@ -292,6 +384,37 @@ export class Car {
     ctx.translate(this.pos.x, this.pos.y);
     ctx.scale(this.fallScale, this.fallScale);
 
+    // 1. Car Headlights (Dynamic Spotlight Beam onto the Arena Floor)
+    if (!this.isFalling) {
+      ctx.save();
+      ctx.rotate(this.angle);
+
+      const beamLen = 95;
+      const beamHalfWidth = 28;
+      const lightGrad = ctx.createRadialGradient(
+        this.currentRadius + 4,
+        0,
+        4,
+        this.currentRadius + beamLen * 0.7,
+        0,
+        beamLen
+      );
+      lightGrad.addColorStop(0, 'rgba(254, 240, 138, 0.42)');
+      lightGrad.addColorStop(0.35, 'rgba(253, 224, 71, 0.22)');
+      lightGrad.addColorStop(1, 'rgba(253, 224, 71, 0)');
+
+      ctx.beginPath();
+      ctx.moveTo(this.currentRadius - 2, -6);
+      ctx.lineTo(this.currentRadius + beamLen, -beamHalfWidth);
+      ctx.lineTo(this.currentRadius + beamLen, beamHalfWidth);
+      ctx.lineTo(this.currentRadius - 2, 6);
+      ctx.closePath();
+      ctx.fillStyle = lightGrad;
+      ctx.fill();
+
+      ctx.restore();
+    }
+
     // Apply Impact Squash & Stretch deformation along collision normal
     if (this.deformationAmount > 0.01) {
       ctx.rotate(this.deformationAngle);
@@ -299,23 +422,40 @@ export class Car {
       ctx.rotate(-this.deformationAngle);
     }
 
-    // 1. Soft drop shadow under car
+    // 2. Soft Drop Shadow under chassis
     ctx.beginPath();
-    ctx.arc(0, 4, this.currentRadius + 3, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.arc(0, 5, this.currentRadius + 3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.52)';
     ctx.fill();
 
-    // 2. Outer Rubber Bumper (Tire Ring)
+    // 3. Outer Rubber Bumper (Tire Ring)
     const isAnchor = this.activeBuff === 'anchor';
+    const isJuggernaut = this.vehicleClass === 'juggernaut';
+    const isSpeedster = this.vehicleClass === 'speedster';
+    const isDrifter = this.vehicleClass === 'drifter';
+
     ctx.beginPath();
     ctx.arc(0, 0, this.currentRadius, 0, Math.PI * 2);
-    ctx.fillStyle = isAnchor ? '#1e293b' : '#0f172a';
+    ctx.fillStyle = isAnchor ? '#1e293b' : (isJuggernaut ? '#18181b' : '#0f172a');
     ctx.fill();
-    ctx.lineWidth = isAnchor ? 6 : 4;
-    ctx.strokeStyle = isAnchor ? '#eab308' : (this.activeBuff === 'heavy' ? '#f59e0b' : '#334155');
+    ctx.lineWidth = isAnchor || isJuggernaut ? 5.5 : 4;
+    ctx.strokeStyle = isAnchor ? '#eab308' : (isJuggernaut ? '#ca8a04' : (isSpeedster ? '#06b6d4' : '#334155'));
     ctx.stroke();
 
-    // Armor spikes if Heavy Anchor active
+    // Juggernaut outer heavy armor studs
+    if (isJuggernaut) {
+      ctx.fillStyle = '#facc15';
+      for (let i = 0; i < 8; i++) {
+        const studAngle = (i / 8) * Math.PI * 2;
+        const sx = Math.cos(studAngle) * (this.currentRadius - 2);
+        const sy = Math.sin(studAngle) * (this.currentRadius - 2);
+        ctx.beginPath();
+        ctx.arc(sx, sy, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // Armor spikes if Anchor buff active
     if (isAnchor) {
       for (let i = 0; i < 6; i++) {
         const spikeAngle = (i / 6) * Math.PI * 2;
@@ -332,7 +472,7 @@ export class Car {
       }
     }
 
-    // 3. Main Car Body
+    // 4. Main Metallic Chassis Body
     ctx.beginPath();
     ctx.arc(0, 0, this.currentRadius - 4, 0, Math.PI * 2);
     ctx.fillStyle = this.colorPrimary;
@@ -344,14 +484,68 @@ export class Car {
     ctx.fillStyle = this.colorSecondary;
     ctx.fill();
 
-    // 4. Directional Heading Indicator (Headlights & driver helmet)
+    // 5. Dynamic Metallic Specular Reflection (跑車金屬烤漆高光弧)
+    ctx.save();
+    const specGrad = ctx.createLinearGradient(
+      -this.currentRadius * 0.7,
+      -this.currentRadius * 0.8,
+      this.currentRadius * 0.5,
+      this.currentRadius * 0.5
+    );
+    specGrad.addColorStop(0, 'rgba(255, 255, 255, 0.65)');
+    specGrad.addColorStop(0.35, 'rgba(255, 255, 255, 0.15)');
+    specGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+    ctx.beginPath();
+    ctx.arc(
+      -this.currentRadius * 0.15,
+      -this.currentRadius * 0.25,
+      this.currentRadius * 0.65,
+      0,
+      Math.PI * 2
+    );
+    ctx.fillStyle = specGrad;
+    ctx.fill();
+    ctx.restore();
+
+    // 6. Directional Heading Indicator & Class Details
     ctx.save();
     ctx.rotate(this.angle);
 
-    // Front headlights beam
+    // Drifter: Twin exhaust pipes at the back
+    if (isDrifter) {
+      ctx.fillStyle = '#475569';
+      ctx.strokeStyle = '#06b6d4';
+      ctx.lineWidth = 1.5;
+      const rearX = -this.currentRadius * 0.9;
+      const exSpread = this.currentRadius * 0.45;
+      ctx.fillRect(rearX, -exSpread - 3, 6, 6);
+      ctx.strokeRect(rearX, -exSpread - 3, 6, 6);
+      ctx.fillRect(rearX, exSpread - 3, 6, 6);
+      ctx.strokeRect(rearX, exSpread - 3, 6, 6);
+
+      // Racing double stripe
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+      ctx.fillRect(-this.currentRadius + 6, -3, this.currentRadius * 1.5, 2);
+      ctx.fillRect(-this.currentRadius + 6, 1, this.currentRadius * 1.5, 2);
+    }
+
+    // Speedster: Sleek front aerodynamic arrow
+    if (isSpeedster) {
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(this.currentRadius - 2, 0);
+      ctx.lineTo(this.currentRadius - 10, -6);
+      ctx.lineTo(this.currentRadius - 7, 0);
+      ctx.lineTo(this.currentRadius - 10, 6);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Front headlights beam lens
     ctx.beginPath();
     ctx.moveTo(this.currentRadius - 4, -8);
-    ctx.lineTo(this.currentRadius + 15, 0);
+    ctx.lineTo(this.currentRadius + 14, 0);
     ctx.lineTo(this.currentRadius - 4, 8);
     ctx.closePath();
     ctx.fillStyle = '#fef08a';
@@ -372,10 +566,10 @@ export class Car {
 
     ctx.restore();
 
-    // 5. Bomb indicator
+    // 7. Bomb indicator
     if (this.hasBomb) {
       ctx.save();
-      ctx.translate(0, -this.currentRadius - 14);
+      ctx.translate(0, -this.currentRadius - 15);
       ctx.fillStyle = '#ef4444';
       ctx.beginPath();
       ctx.arc(0, 0, 11, 0, Math.PI * 2);
@@ -392,7 +586,7 @@ export class Car {
       ctx.restore();
     }
 
-    // 6. Active Buff Visuals
+    // 8. Active Buff Visuals
     if (this.activeBuff === 'rocket') {
       ctx.beginPath();
       ctx.arc(0, 0, this.currentRadius + 5, 0, Math.PI * 2);
@@ -410,17 +604,16 @@ export class Car {
       ctx.shadowBlur = 14;
       ctx.stroke();
 
-      // Anchor icon above
       ctx.save();
       ctx.translate(0, -this.currentRadius - 12);
       ctx.fillStyle = '#eab308';
-      ctx.font = 'bold 14px system-ui';
+      ctx.font = 'bold 13px system-ui';
       ctx.textAlign = 'center';
       ctx.fillText('⚓ 巨獸', 0, 0);
       ctx.restore();
     }
 
-    // 7. EMP Stun visual glitch ring
+    // 9. EMP Stun visual glitch ring
     if (this.empStunTimer > 0) {
       ctx.beginPath();
       ctx.arc(0, 0, this.currentRadius + 7, 0, Math.PI * 2);
@@ -438,11 +631,12 @@ export class Car {
       ctx.restore();
     }
 
-    // 8. Player Tag Label (P1 or P2)
+    // 10. Player Tag & Vehicle Class Icon Label
+    const classCfg = VEHICLE_CLASSES[this.vehicleClass] || VEHICLE_CLASSES.classic;
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 11px system-ui';
     ctx.textAlign = 'center';
-    ctx.fillText(`P${this.id}`, 0, this.currentRadius + 15);
+    ctx.fillText(`P${this.id} [${classCfg.icon}]`, 0, this.currentRadius + 15);
 
     ctx.restore();
   }

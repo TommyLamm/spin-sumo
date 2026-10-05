@@ -1,5 +1,8 @@
-import { Vector2D, ItemType } from '../types';
+import { Vector2D, ItemType, TacticalBomb } from '../types';
 import { Physics } from '../core/Physics';
+import { SoundEffects } from '../audio/SoundEffects';
+import { ParticleSystem } from './Particles';
+import { Car } from './Car';
 
 export interface MysteryBox {
   id: number;
@@ -21,21 +24,35 @@ export interface OilPuddle {
 export class ItemManager {
   public boxes: MysteryBox[] = [];
   public puddles: OilPuddle[] = [];
+  public tacticalBomb: TacticalBomb | null = null;
+
   private nextBoxId: number = 1;
-  private spawnCooldown: number = 5.0; // Spawns after 5s
+  private spawnCooldown: number = 5.0; // Spawns mystery box after 5s
+  private bombAirdropped: boolean = false;
+  private bombAirdropTime: number = 10.0; // Airdrops at 10s into round
 
   public reset() {
     this.boxes = [];
     this.puddles = [];
+    this.tacticalBomb = null;
     this.spawnCooldown = 5.0;
+    this.bombAirdropped = false;
+    this.bombAirdropTime = 9.0 + Math.random() * 4.0; // 9~13 seconds
   }
 
-  public update(dt: number, arenaRadius: number, arenaCenter: Vector2D) {
-    // 1. Spawning logic
+  public update(
+    dt: number,
+    arenaRadius: number,
+    arenaCenter: Vector2D,
+    roundElapsed: number,
+    particles?: ParticleSystem,
+    cars?: Car[]
+  ) {
+    // 1. Spawning Mystery Boxes
     this.spawnCooldown -= dt;
     if (this.spawnCooldown <= 0 && this.boxes.length === 0) {
       this.spawnMysteryBox(arenaRadius, arenaCenter);
-      this.spawnCooldown = 8.0; // next box in 8s after this one is gone
+      this.spawnCooldown = 8.0;
     }
 
     // 2. Mystery Box animation
@@ -50,14 +67,163 @@ export class ItemManager {
         this.puddles.splice(i, 1);
       }
     }
+
+    // 4. Tactical Bomb Airdrop Trigger
+    if (!this.bombAirdropped && roundElapsed >= this.bombAirdropTime) {
+      this.bombAirdropped = true;
+      this.airdropTacticalBomb(arenaCenter);
+    }
+
+    // 5. Tactical Bomb update
+    if (this.tacticalBomb && !this.tacticalBomb.exploded) {
+      const bomb = this.tacticalBomb;
+
+      if (bomb.isDropping) {
+        bomb.dropProgress += dt * 0.9;
+        if (bomb.dropProgress >= 1.0) {
+          bomb.isDropping = false;
+          bomb.dropProgress = 1.0;
+          bomb.pos = { ...bomb.targetPos };
+          if (particles) {
+            particles.addShockwave(bomb.pos, 50, '#f97316');
+            particles.triggerShake(5, 0.15);
+          }
+        } else {
+          // Parachute drift down
+          bomb.pos.y = bomb.targetPos.y - (1 - bomb.dropProgress) * 260;
+        }
+      } else {
+        // Bomb on ground: count down
+        const prevFuse = bomb.fuseTimer;
+        bomb.fuseTimer -= dt;
+
+        // Ticking audio
+        const tickInterval = bomb.fuseTimer < 2.0 ? 0.25 : 0.8;
+        if (Math.floor(prevFuse / tickInterval) !== Math.floor(bomb.fuseTimer / tickInterval)) {
+          SoundEffects.playNuclearTick();
+          if (particles) {
+            particles.addShockwave(bomb.pos, 45, '#ef4444');
+          }
+        }
+
+        // Bomb ground physics (friction & position integration)
+        bomb.pos.x += bomb.vel.x * dt;
+        bomb.pos.y += bomb.vel.y * dt;
+        bomb.vel.x *= Math.pow(0.88, 60 * dt);
+        bomb.vel.y *= Math.pow(0.88, 60 * dt);
+
+        // Keep inside arena center radius
+        const d = Physics.dist(bomb.pos, arenaCenter);
+        if (d > arenaRadius - bomb.radius) {
+          const toC = Physics.normalize(Physics.sub(arenaCenter, bomb.pos));
+          bomb.vel.x += toC.x * 200 * dt;
+          bomb.vel.y += toC.y * 200 * dt;
+        }
+
+        // Resolve collisions with cars (players can push the bomb!)
+        if (cars) {
+          for (const car of cars) {
+            if (!car.isFalling) {
+              this.resolveCarBombCollision(car, bomb);
+            }
+          }
+        }
+
+        // Check Explosion!
+        if (bomb.fuseTimer <= 0) {
+          this.triggerBombExplosion(bomb, cars, particles);
+        }
+      }
+    }
+  }
+
+  private airdropTacticalBomb(arenaCenter: Vector2D) {
+    // Drop near arena center (offset up to 45px)
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * 45;
+    const target = {
+      x: arenaCenter.x + Math.cos(angle) * dist,
+      y: arenaCenter.y + Math.sin(angle) * dist,
+    };
+
+    this.tacticalBomb = {
+      id: Date.now(),
+      pos: { x: target.x, y: target.y - 260 },
+      vel: { x: 0, y: 0 },
+      radius: 20,
+      mass: 1.2,
+      fuseTimer: 5.0,
+      maxFuse: 5.0,
+      isDropping: true,
+      dropProgress: 0,
+      targetPos: target,
+      exploded: false,
+    };
+
+    SoundEffects.playNuclearSiren();
+  }
+
+  private resolveCarBombCollision(car: Car, bomb: TacticalBomb) {
+    const delta = Physics.sub(bomb.pos, car.pos);
+    const dist = Physics.len(delta);
+    const minDist = car.currentRadius + bomb.radius;
+
+    if (dist < minDist && dist > 0.001) {
+      const normal = Physics.scale(delta, 1 / dist);
+      const overlap = minDist - dist;
+
+      // Position pushout
+      bomb.pos.x += normal.x * overlap * 0.75;
+      bomb.pos.y += normal.y * overlap * 0.75;
+      car.pos.x -= normal.x * overlap * 0.25;
+      car.pos.y -= normal.y * overlap * 0.25;
+
+      // Impulse transfer: shove bomb away with car velocity
+      const pushSpeed = Physics.len(car.vel);
+      if (pushSpeed > 30) {
+        bomb.vel.x = normal.x * Math.max(pushSpeed * 0.9, 140);
+        bomb.vel.y = normal.y * Math.max(pushSpeed * 0.9, 140);
+      }
+    }
+  }
+
+  private triggerBombExplosion(bomb: TacticalBomb, cars?: Car[], particles?: ParticleSystem) {
+    bomb.exploded = true;
+    SoundEffects.playNuclearExplosion();
+
+    if (particles) {
+      particles.addNuclearExplosion(bomb.pos);
+      particles.triggerShake(24, 0.55);
+    }
+
+    // Blast cars in high blast radius (240px)
+    if (cars) {
+      const blastRadius = 240;
+      for (const car of cars) {
+        if (car.isFalling) continue;
+        const d = Physics.dist(bomb.pos, car.pos);
+        if (d < blastRadius) {
+          const blastDir = d > 0.001 ? Physics.normalize(Physics.sub(car.pos, bomb.pos)) : { x: 1, y: 0 };
+          const blastFactor = Math.max(0.35, 1 - d / blastRadius);
+          // Massive impulse outward!
+          const blastForce = (950 * blastFactor) / Math.max(0.6, car.currentMass * 0.8);
+          car.vel.x += blastDir.x * blastForce;
+          car.vel.y += blastDir.y * blastForce;
+
+          // Stun hit
+          car.triggerWeakSpotStun();
+          if (particles) {
+            particles.addIntenseCollisionSparks(car.pos, 20, 1.5);
+          }
+        }
+      }
+    }
   }
 
   private spawnMysteryBox(arenaRadius: number, arenaCenter: Vector2D) {
-    // Prioritize new exciting items: EMP Shockwave & Heavy Anchor!
     const types: ItemType[] = ['anchor', 'emp', 'rocket', 'oil', 'bomb', 'anchor', 'emp'];
     const chosenType = types[Math.floor(Math.random() * types.length)];
 
-    // Spawn inside 65% of arena radius
     const angle = Math.random() * Math.PI * 2;
     const dist = Math.random() * (arenaRadius * 0.6);
 
@@ -115,7 +281,6 @@ export class ItemManager {
       ctx.strokeStyle = `rgba(100, 116, 139, ${alpha * 0.7})`;
       ctx.stroke();
 
-      // Iridescent rainbow sheen on oil
       ctx.beginPath();
       ctx.arc(puddle.x - 6, puddle.y - 6, puddle.radius * 0.45, 0, Math.PI * 2);
       ctx.fillStyle = `rgba(168, 85, 247, ${alpha * 0.4})`;
@@ -155,12 +320,10 @@ export class ItemManager {
         symbol = '✹';
       }
 
-      // Dynamic outer pulse glow
       const pulse = (Math.sin(box.bobTimer * 6) + 1) * 0.5;
       ctx.shadowColor = strokeColor;
       ctx.shadowBlur = 10 + pulse * 10;
 
-      // Box shape
       ctx.fillStyle = boxColor;
       ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 3;
@@ -169,13 +332,90 @@ export class ItemManager {
       ctx.fill();
       ctx.stroke();
 
-      // Item icon / Symbol
       ctx.shadowBlur = 0;
       ctx.fillStyle = '#ffffff';
       ctx.font = 'bold 18px system-ui';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(symbol, box.x, floatY);
+
+      ctx.restore();
+    }
+
+    // 3. Draw Tactical Bomb (Airdrop & Countdown)
+    if (this.tacticalBomb && !this.tacticalBomb.exploded) {
+      const bomb = this.tacticalBomb;
+      ctx.save();
+
+      // Draw landing crosshair & shadow on target position
+      if (bomb.isDropping) {
+        ctx.beginPath();
+        ctx.arc(bomb.targetPos.x, bomb.targetPos.y, 22 * bomb.dropProgress + 6, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(0, 0, 0, ${0.15 + bomb.dropProgress * 0.35})`;
+        ctx.fill();
+
+        // Parachute canopy above
+        ctx.save();
+        ctx.translate(bomb.pos.x, bomb.pos.y - 28);
+        ctx.beginPath();
+        ctx.arc(0, 0, 24, Math.PI, 0);
+        ctx.fillStyle = '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Cords
+        ctx.beginPath();
+        ctx.moveTo(-20, 0);
+        ctx.lineTo(0, 26);
+        ctx.moveTo(20, 0);
+        ctx.lineTo(0, 26);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.stroke();
+        ctx.restore();
+      } else {
+        // Red warning perimeter circle (blast zone radius 240px)
+        const pulse = (Math.sin(performance.now() * 0.008) + 1) * 0.5;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(bomb.pos.x, bomb.pos.y, 230, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(239, 68, 68, ${0.18 + pulse * 0.22})`;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 8]);
+        ctx.stroke();
+        ctx.restore();
+
+        // Ground shadow
+        ctx.beginPath();
+        ctx.arc(bomb.pos.x, bomb.pos.y + 3, bomb.radius + 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        ctx.fill();
+      }
+
+      // Bomb chassis
+      ctx.translate(bomb.pos.x, bomb.pos.y);
+
+      // Warning Strobe
+      const flash = bomb.fuseTimer < 2.0 ? Math.floor(bomb.fuseTimer * 8) % 2 === 0 : Math.floor(bomb.fuseTimer * 3) % 2 === 0;
+
+      ctx.beginPath();
+      ctx.arc(0, 0, bomb.radius, 0, Math.PI * 2);
+      ctx.fillStyle = flash ? '#ef4444' : '#1e293b';
+      ctx.fill();
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = '#facc15';
+      ctx.stroke();
+
+      // Radiation symbol / Countdown
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 13px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (bomb.fuseTimer > 0) {
+        ctx.fillText(`☢${Math.ceil(bomb.fuseTimer)}s`, 0, 0);
+      } else {
+        ctx.fillText('💥', 0, 0);
+      }
 
       ctx.restore();
     }

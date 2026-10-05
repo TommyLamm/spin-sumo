@@ -430,4 +430,175 @@ export class SoundEffects {
       // Audio error guard
     }
   }
+
+  public static playNuclearSiren() {
+    if (this.muted || !this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(480, t);
+      osc.frequency.linearRampToValueAtTime(780, t + 0.35);
+      osc.frequency.linearRampToValueAtTime(480, t + 0.7);
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1200, t);
+
+      gain.gain.setValueAtTime(0.2, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.75);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.75);
+    } catch {
+      // Audio error guard
+    }
+  }
+
+  public static playNuclearTick() {
+    if (this.muted || !this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(1400, t);
+
+      gain.gain.setValueAtTime(0.12, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.06);
+    } catch {
+      // Audio error guard
+    }
+  }
+
+  public static playNuclearExplosion() {
+    if (this.muted || !this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      // 1. Deep rumble sub-bass
+      const subOsc = this.ctx.createOscillator();
+      const subGain = this.ctx.createGain();
+      subOsc.type = 'sine';
+      subOsc.frequency.setValueAtTime(95, t);
+      subOsc.frequency.exponentialRampToValueAtTime(25, t + 1.2);
+
+      subGain.gain.setValueAtTime(0.65, t);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+
+      subOsc.connect(subGain);
+      subGain.connect(this.ctx.destination);
+
+      subOsc.start(t);
+      subOsc.stop(t + 1.2);
+
+      // 2. High impact explosion blast
+      const bufferSize = Math.floor(this.ctx.sampleRate * 0.9);
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.4));
+      }
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(600, t);
+      filter.frequency.linearRampToValueAtTime(40, t + 0.85);
+
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.6, t);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
+
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.ctx.destination);
+
+      noise.start(t);
+      noise.stop(t + 0.9);
+    } catch {
+      // Audio error guard
+    }
+  }
+
+  public static playTurboIgnite() {
+    if (this.muted || !this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.linearRampToValueAtTime(450, t + 0.18);
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(800, t);
+      filter.Q.setValueAtTime(2.0, t);
+
+      gain.gain.setValueAtTime(0.18, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.ctx.destination);
+
+      osc.start(t);
+      osc.stop(t + 0.2);
+    } catch {
+      // Audio error guard
+    }
+  }
+
+  public static playCupVictory() {
+    if (this.muted || !this.ctx) return;
+    try {
+      const t = this.ctx.currentTime;
+      const fanfare = [
+        { f: 523.25, d: 0.14 }, // C5
+        { f: 587.33, d: 0.14 }, // D5
+        { f: 659.25, d: 0.14 }, // E5
+        { f: 783.99, d: 0.26 }, // G5
+        { f: 659.25, d: 0.14 }, // E5
+        { f: 783.99, d: 0.28 }, // G5
+        { f: 1046.5, d: 0.85 }, // C6
+      ];
+      let cur = t;
+      fanfare.forEach((n) => {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(n.f, cur);
+
+        gain.gain.setValueAtTime(0.25, cur);
+        gain.gain.exponentialRampToValueAtTime(0.001, cur + n.d);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(cur);
+        osc.stop(cur + n.d);
+        cur += n.d * 0.88;
+      });
+    } catch {
+      // Audio error guard
+    }
+  }
 }
+

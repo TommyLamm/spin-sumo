@@ -96,7 +96,26 @@ export class SumoAI {
       }
     }
 
-    // 2. Target Selection: Opponent vs High-value Power-up
+    // 2. Tactical Nuclear Bomb Danger Evasion
+    if (itemManager.tacticalBomb && !itemManager.tacticalBomb.exploded && !itemManager.tacticalBomb.isDropping) {
+      const bomb = itemManager.tacticalBomb;
+      const distToBomb = Physics.dist(aiCar.pos, bomb.pos);
+      if (bomb.fuseTimer < 2.8 && distToBomb < 160 && (this.difficulty === 'hard' || this.difficulty === 'normal')) {
+        // Run away from bomb!
+        const escapeDir = Physics.normalize(Physics.sub(aiCar.pos, bomb.pos));
+        const escapeTarget = Physics.add(aiCar.pos, Physics.scale(escapeDir, 180));
+        // Keep inside arena
+        if (Physics.dist(escapeTarget, arena.center) < arena.currentRadius - 20) {
+          const toTarget = Physics.sub(escapeTarget, aiCar.pos);
+          const targetAngle = Math.atan2(toTarget.y, toTarget.x);
+          const angleDiff = Math.abs(this.normalizeAngle(aiCar.angle - targetAngle));
+          this.currentDecision = angleDiff < angleTolerance * 1.5;
+          return this.currentDecision;
+        }
+      }
+    }
+
+    // 3. Target Selection: Opponent vs High-value Power-up
     let targetPos: Vector2D = opponentCar.pos;
 
     if (itemManager.boxes.length > 0 && Math.random() < itemDesire) {
